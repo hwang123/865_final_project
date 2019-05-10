@@ -80,11 +80,12 @@ vector<ROI> readFromFile(string fileName) {
         Image img = Image(roiWidth, roiHeight, 3);
 
         for (int y = 0; y < roiHeight; ++y) {
-            // Get the first line of the mask
+            // Get the first line of the mask, which represents a row in the ROI
             getline(inFile, line);
             vector<string> roiRow = split(line);
 
             for (int x = 0; x < roiWidth; ++x) {
+                // Get the actual pixel value
                 float pixelVal = stof(roiRow[x]);
                 mask(x, y) = pixelVal;
 
@@ -94,7 +95,7 @@ vector<ROI> readFromFile(string fileName) {
             }   
         }
         ROI roi(img, mask, predictionScore, x1, x2, y1, y2);
-        roi.writeMask("./Output/roiMask.png");
+        roi.writeImg("Output/dog" + to_string(i) + ".png");
         rois.push_back(roi);
     }
     inFile.close();
