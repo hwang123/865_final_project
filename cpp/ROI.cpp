@@ -24,10 +24,10 @@ ROI::ROI(
     y2 = y2;
 };
 
-void ROI::writeMask() {
-
+void ROI::writeMask(string filename) {
+	mask.write(filename);
 }
 
-void ROI::writeImg() {
-	
+void ROI::writeImg(string filename) {
+	img.write(filename);
 }

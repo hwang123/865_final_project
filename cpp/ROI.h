@@ -26,11 +26,11 @@ public:
     int getHeight()            const { return height; }
     int getChannels()          const { return channels; } 
     float getPredictionScore() const { return predictionScore; }
-    Image& getMask()             { return &mask; }
-    Image& getImg()              { return &img; }
+    Image& getMask()             { return mask; }
+    Image& getImg()              { return img; }
 
-    void writeMask();
-    void writeImg();
+    void writeMask(string filename);
+    void writeImg(string filename);
 
     // vector<int> getBoundingBox() const {
     //     vector<int> ret{x1, x2, y1, y2};

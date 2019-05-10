@@ -94,7 +94,7 @@ vector<ROI> readFromFile(string fileName) {
             }   
         }
         ROI roi(img, mask, predictionScore, x1, x2, y1, y2);
-
+        roi.writeMask("./Output/roiMask.png");
         rois.push_back(roi);
     }
     inFile.close();
