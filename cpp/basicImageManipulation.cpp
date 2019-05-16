@@ -11,7 +11,291 @@
 #include "basicImageManipulation.h"
 #include <assert.h>
 using namespace std;
+// FINAL PROJECT ---------------------------------------
 
+// Generates two images of the same size of the mask input.
+// The first image is a binary mask outlining the boundary of the mask.
+// The second image is a 2-channel image denoting the normal direction to the boundary at each of
+//  the boundary points. x-direction in the first channel, y-direction in the second.
+vector<Image> boundaryTrace(Image &mask) {
+    // First find starting pixel
+    vector<Image> outputs;
+    Image boundary = Image(mask.width(), mask.height(), mask.channels());
+    Image slopes = Image(mask.width(), mask.height(), 2);
+    
+    vector<pair<int,int>> directions{
+        make_pair(-1, 0),
+        make_pair(-1, -1),
+        make_pair(0, -1),
+        make_pair(1, -1),
+        make_pair(1, 0),
+        make_pair(1, 1),
+        make_pair(0, 1),
+        make_pair(-1, 1)
+    };
+
+    int xo, yo;
+    bool breakLoop = false;
+    for (int y = 0; y < mask.height(); ++y) {
+        if (breakLoop) break;
+        for (int x = 0; x < mask.width(); ++x) {
+            float pv = mask(x, y);
+            if (pv > 0) {
+                xo = x;
+                yo = y;
+                breakLoop = true;
+                break;
+            }
+        }
+    }
+
+    boundary(xo, yo) = 1.0f;
+
+    int directionIdx = 0;
+    bool keepSearching = true;
+
+    while (keepSearching) {
+        for (int k = directionIdx + 1; k < directionIdx + 9; ++k) {
+            int idx = k % 8;
+
+            pair<int, int> direction = directions[idx];
+            int newX = xo + direction.first;
+            int newY = yo + direction.second;
+
+            float boundaryVal = boundary.smartAccessor(newX, newY, 0);
+            float maskVal = mask.smartAccessor(newX, newY, 0);
+
+            if (newX == xo && newY == yo) {
+                keepSearching = false;
+                break;
+            } else if (boundaryVal > 0) {
+                keepSearching = false;
+                break;
+            } else if (maskVal > 0) {
+                boundary(newX, newY) = 1.0f;
+
+                int slopeIdx = (idx + 6) % 8;
+                pair<int, int> slope = directions[slopeIdx];
+                slopes(newX, newY, 0) = slope.first;
+                slopes(newX, newY, 1) = slope.second;
+
+                directionIdx = idx + 4;
+                xo = newX;
+                yo = newY;
+                break;
+            }
+        }
+    }
+
+    outputs.push_back(boundary);
+    outputs.push_back(slopes);
+    return outputs;
+}
+
+Image padBoundary(vector<Image> &boundaries, int radius) {
+    Image boundary = boundaries[0];
+    Image directions = boundaries[1];
+    Image padded = Image(boundary.width(), boundary.height(), boundary.channels());
+
+    for (int x = 0; x < boundary.width(); ++x) {
+        for (int y = 0; y < boundary.height(); ++y) {
+            float boundaryVal = boundary(x, y);
+
+            if (boundaryVal > 0) {
+                int dx = directions(x, y, 0);
+                int dy = directions(x, y, 1);
+                
+                for (int i = -3; i < 4; ++i) {
+                    for (int j = -3; j < 4; ++j) {
+                        int xIdx = x + i;
+                        int yIdx = y + j;
+                        for (int delta = 0; delta < radius; ++delta) {
+                            int finalXIdx = xIdx + dx * delta;
+                            int finalYIdx = yIdx + dy * delta;
+                            if (finalXIdx < 0 || finalYIdx < 0 || finalXIdx > padded.width() - 1 || finalYIdx > padded.height() - 1) {
+                                break;
+                            }
+                            float previousVal = padded(finalXIdx, finalYIdx);
+                            float gaussian = exp(-1.0f * pow(delta, 2) / 200.0f);
+                            // float gaussian = 1.0f - (1.0f / radius) * delta;
+
+                            padded(finalXIdx, finalYIdx) = max(previousVal, gaussian);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return padded;
+}
+
+Image combineMaskBoundary(Image &mask, Image &boundary) {
+    Image combined = Image(boundary.width(), boundary.height(), boundary.channels());
+
+    for (int x = 0; x < combined.width(); ++x) {
+        for (int y = 0; y < combined.height(); ++y) {
+            combined(x, y) = max(mask.smartAccessor(x, y,0), boundary(x, y));
+        }
+    }
+
+    return combined;
+}
+
+Image overlayStyleTransferBoundary(Image& base, Image& styled, ROI& roi, int blurRadius) {
+    Image overlayed = base;
+    Image mask = roi.getMask();
+    vector<Image> boundaries = boundaryTrace(mask);
+
+    Image paddedBoundary = padBoundary(boundaries, floor(roi.getWidth()/8.0f));
+    Image combinedBoundary = combineMaskBoundary(mask, paddedBoundary);
+    combinedBoundary.write("./Output/mask.png");
+    vector<int> bb = roi.getBoundingBox();
+    int x1 = bb[0], x2 = bb[1], y1 = bb[2], y2 = bb[3];
+
+    for (int i = 0; i < x2-x1-1; ++i) {
+        for (int j = 0; j < y2-y1-1; ++j) {
+            
+            float alpha = combinedBoundary(i,j);
+            // If the pixel is in the semantic mask
+            if (alpha > 0) {
+                int xBaseIdx = x1 + i;
+                int yBaseIdx = y1 + j;
+
+                for (int z = 0; z < base.channels(); ++z) {
+                    float overlayedValue = alpha*styled(i, j, z) + (1.0f-alpha)*base(xBaseIdx, yBaseIdx, z);
+                    overlayed(xBaseIdx, yBaseIdx, z) = overlayedValue;
+                }
+            } 
+        }
+    }
+
+    return overlayed;
+}
+
+Image overlayStyleTransferNaive(Image& base, Image& styled, ROI& roi) {
+    Image overlayed = base;
+
+    vector<int> bb = roi.getBoundingBox();
+    int x1 = bb[0], x2 = bb[1], y1 = bb[2], y2 = bb[3];
+
+    for (int i = 0; i < x2-x1; ++i) {
+        for (int j = 0; j < y2-y1; ++j) {
+            int xBaseIdx = x1 + i;
+            int yBaseIdx = y1 + j;
+            for (int z = 0; z < 3; ++z) {
+                overlayed(xBaseIdx, yBaseIdx, z) = styled(i, j, z);
+            }
+        }
+    }
+
+    return overlayed;
+}
+
+Image overlayStyleTransferAlpha(Image& base, Image& styled, ROI& roi, int radius) {
+    Image overlayed = base;
+
+    vector<int> bb = roi.getBoundingBox();
+    int x1 = bb[0], x2 = bb[1], y1 = bb[2], y2 = bb[3];
+
+    int roiWidth = x2-x1;
+    int roiHeight = y2-y1;
+
+    // First fully transfer the style to a tighter region
+    for (int i = radius; i < roiWidth - radius; ++i) {
+        for (int j = radius; j < roiHeight - radius; ++j) {
+            int xBaseIdx = x1 + i;
+            int yBaseIdx = y1 + j;
+            for (int z = 0; z < 3; ++z) {
+                overlayed(xBaseIdx, yBaseIdx, z) = styled(i, j, z);
+            }
+        }
+    }
+
+    // Then alpha-blend the outer band of the ROI
+    // Can be thought of as 4 separate for-loops over each of the rectangular ROI edges
+    int bandWidth = x2 - x1 - 2*radius;
+    int bandHeight = y2 - y1 - 2*radius;
+
+    float dx = 1.0f/radius;
+    for (int i = 0; i < roiWidth; ++i) {
+        for (int j = 0; j < radius; ++j) {
+            int xIdx = x1 + i;
+            int yIdx = y1 + j;
+
+            float alpha = dx*j;
+            for (int z = 0; z < base.channels(); ++z) {
+                overlayed(xIdx, yIdx, z) = alpha*styled(i, j, z) + (1.0f-alpha)*base(xIdx, yIdx, z);
+            }
+        }
+    }
+
+    for (int i = 0; i < roiWidth; ++i) {
+        for (int j = roiHeight - radius; j < roiHeight; ++j) {
+            int xIdx = x1 + i;
+            int yIdx = y1 + j;
+
+            float alpha = 1.0f - dx*(j - roiHeight + radius);
+            for (int z = 0; z < base.channels(); ++z) {
+                overlayed(xIdx, yIdx, z) = alpha*styled(i, j, z) + (1.0f-alpha)*base(xIdx, yIdx, z);
+            }
+        }
+    }
+
+    for (int i = 0; i < radius; ++i) {
+        for (int j = 0; j < roiHeight; ++j) {
+            int xIdx = x1 + i;
+            int yIdx = y1 + j;
+
+            float alpha = dx * i;
+            for (int z = 0; z < base.channels(); ++z) {
+                overlayed(xIdx, yIdx, z) = alpha*styled(i, j, z) + (1.0f-alpha)*base(xIdx, yIdx, z);
+            }
+        }
+    }
+
+    for (int i = roiWidth - radius; i < roiWidth; ++i) {
+        for (int j = 0; j < roiHeight; ++j) {
+            int xIdx = x1 + i;
+            int yIdx = y1 + j;
+
+            float alpha = 1.0f - dx*(i - roiWidth + radius);
+            for (int z = 0; z < base.channels(); ++z) {
+                overlayed(xIdx, yIdx, z) = alpha*styled(i, j, z) + (1.0f-alpha)*base(xIdx, yIdx, z);
+            }
+        }
+    }
+
+    return overlayed;    
+}
+
+Image overlayStyleTransferMaskNaive(Image& base, Image& styled, ROI& roi) {
+    Image overlayed = base;
+
+    Image mask = roi.getMask();
+    vector<int> bb = roi.getBoundingBox();
+    int x1 = bb[0], x2 = bb[1], y1 = bb[2], y2 = bb[3];
+
+    for (int i = 0; i < x2-x1; ++i) {
+        for (int j = 0; j < y2-y1; ++j) {
+            int maskVal = mask(i,j);
+
+            // If the pixel is in the semantic mask
+            if (maskVal > 0) {
+                int xBaseIdx = x1 + i;
+                int yBaseIdx = y1 + j;
+                for (int z = 0; z < 3; ++z) {
+                    overlayed(xBaseIdx, yBaseIdx, z) = styled(i, j, z);
+                }
+            } 
+        }
+    }
+
+    return overlayed;
+}
+
+
+// -----------------------------------------------------
 
 // --------- HANDOUT PS05 ------------------------------
 // -----------------------------------------------------

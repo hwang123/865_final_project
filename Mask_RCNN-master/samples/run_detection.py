@@ -35,7 +35,7 @@ def write_results_to_file(r):
 	num_regions = len(rois)
 
 	# Open file
-	f = open("../../res/coco_res.txt","w+")
+	f = open("../../res/highway_data.txt","w+")
 
 	# Write out the width and height of the image on one line
 	f.write("%d " % width)
@@ -127,8 +127,10 @@ class_names = ['BG', 'person', 'bicycle', 'car', 'motorcycle', 'airplane',
 # Load a random image from the images folder
 file_names = next(os.walk(IMAGE_DIR))[2]
 
-image = skimage.io.imread(os.path.join(IMAGE_DIR, '2516944023_d00345997d_z.jpg'))
+# image = skimage.io.imread(os.path.join(IMAGE_DIR, '2516944023_d00345997d_z.jpg'))
+image = skimage.io.imread(os.path.join(IMAGE_DIR, 'highway.jpg'))
 
+print(image.shape)
 # Run detection
 results = model.detect([image], verbose=1)
 r = results[0]
@@ -137,6 +139,6 @@ r = results[0]
 write_results_to_file(r)
 
 # Visualize results
-if False:
+if True:
 	visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'], 
                             class_names, r['scores'])

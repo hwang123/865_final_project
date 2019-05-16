@@ -79,6 +79,9 @@ public:
     // create a line segment from [xstart, ystart] to [xend, yend] with specified color
     void create_line(int xstart, int ystart, int xend, int yend,
                      float r = 0.0f, float g = 0.0f, float b = 0.0f);
+
+    void create_line_smart(int xstart, int ystart, int xend, int yend,
+                 float r = 0.0f, float g = 0.0f, float b = 0.0f);
     // ------------------------------------------------------
 
 

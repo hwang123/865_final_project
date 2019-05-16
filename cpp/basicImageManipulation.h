@@ -12,6 +12,7 @@
 #define __basicImageManipulation__h
 
 #include "Image.h"
+#include "ROI.h"
 #include <iostream>
 #include <math.h>
 
@@ -48,5 +49,15 @@ Image scaleBicubic(const Image &im, float factor, float B, float C);
 Image scaleLanczos(const Image &im, float factor, float a);
 Image rotate(const Image &im, float theta);
 // ------------------------------------------------------
+
+// --------- HANDOUT FINAL PROJECT ------------------------------
+Image overlayStyleTransferNaive(Image& base, Image& styled, ROI& roi);
+Image overlayStyleTransferAlpha(Image& base, Image& styled, ROI& roi, int radius);
+Image overlayStyleTransferMaskNaive(Image& base, Image& styled, ROI& roi);
+Image overlayStyleTransferBoundary(Image& base, Image& styled, ROI& roi, int blurRadius = 20);
+
+vector<Image> boundaryTrace(Image &mask);
+Image padBoundary(vector<Image> &boundaries, int radius);
+Image combineMaskBoundary(Image &mask, Image &boundary);
 
 #endif

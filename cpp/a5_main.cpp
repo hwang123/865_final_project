@@ -32,7 +32,7 @@ vector<string> split(string const &input) {
     return ret;
 }
 
-vector<ROI> readFromFile(string fileName) {
+vector<ROI> readFromFile(string fileName, Image &reference, int paddingRadius) {
     vector<ROI> rois; 
 
     ifstream inFile;
@@ -46,14 +46,13 @@ vector<ROI> readFromFile(string fileName) {
 
     int width = stoi(dimensions[0]);
     int height = stoi(dimensions[1]);
+
     cout << "Image has size of " << width << ", " << height << endl;
 
     // Get number of ROI
     getline(inFile, line);
     int numROI = stoi(line);
     cout << "Image has " << numROI << " regions of interest." << endl;
-
-    Image reference("./Input/dogs.png");
 
     for (int i = 0; i < numROI; ++i) {
         // Get the class ID and prediction score
@@ -66,36 +65,74 @@ vector<ROI> readFromFile(string fileName) {
         getline(inFile, line);
         vector<string> boundingBox = split(line);
 
-        int x1 = stoi(boundingBox[1]);
-        int x2 = stoi(boundingBox[3]);
-        int y1 = stoi(boundingBox[0]);
-        int y2 = stoi(boundingBox[2]);
+        int x1 = stoi(boundingBox[1]) + paddingRadius;
+        int y1 = stoi(boundingBox[0]) + paddingRadius;
+
+        int x2 = stoi(boundingBox[3]) + paddingRadius;
+        int y2 = stoi(boundingBox[2]) + paddingRadius;
 
         int roiWidth = x2-x1+1;
         int roiHeight = y2-y1+1;
 
+        cout << "ROI dimensions: " << roiWidth << "," << roiHeight << endl;
+
+        int paddedWidth = roiWidth + 2*paddingRadius;
+        int paddedHeight = roiHeight + 2*paddingRadius;
+
         // Create an Image to store the silhouette of the ROI
-        Image mask = Image(roiWidth, roiHeight, 1);
+        Image mask = Image(paddedWidth, paddedHeight, 1);
         // Create an Image to store the ROI content itself
-        Image img = Image(roiWidth, roiHeight, 3);
+        Image img = Image(paddedWidth, paddedHeight, 3);
 
-        for (int y = 0; y < roiHeight; ++y) {
+        // for (int y = 0; y < roiHeight; ++y) {
+        //     // Get the first line of the mask, which represents a row in the ROI
+        //     getline(inFile, line);
+        //     vector<string> roiRow = split(line);
+
+        //     for (int x = 0; x < roiWidth; ++x) {
+        //         // Get the actual pixel value
+        //         float pixelVal = stof(roiRow[x]);
+        //         mask(x, y) = pixelVal;
+
+        //         int refIdxX = x1 - paddingRadius + x;
+        //         int refIdxY = y1 - paddingRadius + y;
+
+        //         for (int z = 0; z < img.channels(); ++z) {
+        //             img(x, y, z) = reference(refIdxX, refIdxY, z);
+        //         }
+        //     }   
+        // }
+
+        for (int y = 0; y < paddedHeight; ++y) {
             // Get the first line of the mask, which represents a row in the ROI
-            getline(inFile, line);
-            vector<string> roiRow = split(line);
+            bool heightInMask = y >= paddingRadius && y < paddedHeight - paddingRadius;
+            vector<string> roiRow;
+            if (heightInMask) {
+                getline(inFile, line);
+                roiRow = split(line);       
+            }
 
-            for (int x = 0; x < roiWidth; ++x) {
-                // Get the actual pixel value
-                float pixelVal = stof(roiRow[x]);
-                mask(x, y) = pixelVal;
+            for (int x = 0; x < paddedWidth; ++x) {
+                float maskVal = 0.0f;
+                bool widthInMask = x >= paddingRadius && x < paddedWidth - paddingRadius;
+
+                if (heightInMask && widthInMask) {
+                    maskVal = stof(roiRow[x-paddingRadius]);
+                }
+                mask(x, y) = maskVal;
+
+                int refIdxX = x1 - 2*paddingRadius + x;
+                int refIdxY = y1 - 2*paddingRadius + y;
 
                 for (int z = 0; z < img.channels(); ++z) {
-                    img(x, y, z) = reference(x1 + x, y1 + y, z);
+                    img(x, y, z) = reference(refIdxX, refIdxY, z);
                 }
             }   
         }
-        ROI roi(img, mask, predictionScore, x1, x2, y1, y2);
-        roi.writeImg("Output/dog" + to_string(i) + ".png");
+
+        ROI roi(img, mask, predictionScore, x1 - 2*paddingRadius, x2, y1 - 2*paddingRadius, y2);
+        roi.writeImg("Output/zebra/roi.png");
+
         rois.push_back(roi);
     }
     inFile.close();
@@ -103,8 +140,57 @@ vector<ROI> readFromFile(string fileName) {
     return rois;
 }
 
+
+Image compose(Image &base, vector<ROI> &rois, vector<Image> &styledImgs) {
+    Image overlayed = base;
+
+    for (int i = 0; i < styledImgs.size(); ++i){
+        Image styled = styledImgs[i];
+        ROI roi = rois[i];
+
+        // Scale the styled image to fit the ROI
+        float factor = float(roi.getWidth()) / styled.width();  
+        cout << factor << endl;
+        styled.write("./Output/highway/debug/styled.png");
+        Image styledScaled = scaleBicubic(styled, factor, 3, 3);
+        styledScaled.write("./Output/highway/debug/styledScaled.png");
+
+        overlayed = overlayStyleTransferBoundary(overlayed, styledScaled, roi);
+    }
+
+    return overlayed;
+}
+
+void transferZebra(string styleName) {
+    Image reference("./Input/zebra/zebras.png");
+    vector<ROI> rois = readFromFile("zebra_data.txt", reference, 0);
+
+    vector<Image> styledImgs;
+    styledImgs.push_back(Image("./Input/zebra/zebra_" + styleName + ".png"));
+
+    Image composed = compose(reference, rois, styledImgs);
+    composed.write("./Output/zebra/composed_" + styleName + ".png");
+}
+
+void transferHighway(string styleName1, string styleName2, string styleName3) {
+    Image reference("./Input/highway/highway.png");
+    vector<ROI> rois = readFromFile("highway_data.txt", reference, 25);
+
+    rois[0].getMask().write("./Output/highway/debug/mask0.png");
+    vector<Image> styledImgs;
+    styledImgs.push_back(Image("./Input/highway/" + styleName1 + "/roi0.png"));
+    styledImgs.push_back(Image("./Input/highway/" + styleName2 + "/roi1.png"));
+    styledImgs.push_back(Image("./Input/highway/" + styleName3 + "/roi2.png"));
+
+    Image composed = compose(reference, rois, styledImgs);
+    composed.write("./Output/highway/composed_" + styleName1 + ".png");    
+}
+
 int main() {
-    // Parse file and get regions of interest
-    vector<ROI> rois = readFromFile("coco_res.txt");
+    // -----ZEBRA-----
+    // transferZebra("popart");
+    // transferZebra("sketch");
+    // transferZebra("popart_bw");
+    transferHighway("special", "special", "special");
 }
 

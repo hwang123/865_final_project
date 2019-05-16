@@ -17,7 +17,6 @@
 #include <iostream>
 #include <cmath>
 
-
 using namespace std;
 
 /// Vec2f class

@@ -10,7 +10,7 @@ ROI::ROI(
     int x2,
     int y1,
     int y2
-): img(img), mask(mask){
+): img(img), mask(mask), x1(x1), x2(x2), y1(y1), y2(y2) {
     // img = img;
     // mask = mask;
 
@@ -18,10 +18,6 @@ ROI::ROI(
     height = img.height();
     channels = img.channels();
     predictionScore = score;
-    x1 = x1;
-    x2 = x2;
-    y1 = y1;
-    y2 = y2;
 };
 
 void ROI::writeMask(string filename) {
@@ -30,4 +26,9 @@ void ROI::writeMask(string filename) {
 
 void ROI::writeImg(string filename) {
 	img.write(filename);
+}
+
+vector<int> ROI::getBoundingBox() {
+	vector<int> bb{x1, x2, y1, y2};
+	return bb;
 }

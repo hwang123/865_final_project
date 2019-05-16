@@ -32,6 +32,7 @@ public:
     void writeMask(string filename);
     void writeImg(string filename);
 
+    vector<int> getBoundingBox();
     // vector<int> getBoundingBox() const {
     //     vector<int> ret{x1, x2, y1, y2};
     //     return ret;

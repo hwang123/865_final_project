@@ -271,6 +271,45 @@ void Image::create_line(int xstart, int ystart, int xend, int yend,
     }
 }
 
+void Image::create_line_smart(int xstart, int ystart, int xend, int yend,
+                        float r, float g, float b) {
+    // --------- HANDOUT  PS01 ------------------------------
+    // Create a line segment with specified color
+    // throw NotImplementedException(); // change this
+
+    // --------- SOLUTION PS01 ------------------------------
+    xstart = std::max(xstart, 0);
+    ystart = std::max(ystart, 0);
+
+    xend = std::min(xend, width() - 1);
+    yend = std::min(yend, height() - 1);
+    if (xstart < 0 || xstart >= width() || ystart < 0 || ystart >= height())
+        throw OutOfBoundsException();
+    if (xend < 0 || xend >= width() || yend < 0 || yend >= height())
+        throw OutOfBoundsException();
+    if (dimensions() == 1)
+        throw std::runtime_error("Can't create_line on a 1-d image");
+
+    int valid_channels = channels() > 3 ? 3 : channels();
+    float col[3] = {r, g, b};
+    // 2-d DDA
+    float x = xstart;
+    float y = ystart;
+    int delta_x = xend - xstart;
+    int delta_y = yend - ystart;
+    int delta = std::max(std::abs(delta_x), std::abs(delta_y));
+    for (int i = 0; i <= delta; i++) {
+        int ix = int(x), iy = int(y);
+        if (ix >= 0 && ix < width() && iy >= 0 && iy < height()) {
+            for(int c = 0; c < valid_channels; ++c) {
+                (*this)(ix, iy, c) = col[c];
+            }
+        }
+        x += (float(delta_x) / float(delta));
+        y += (float(delta_y) / float(delta));
+    }
+}
+
 
 
 // ---------------- END of PS01 -------------------------------------
